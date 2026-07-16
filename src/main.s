@@ -1,6 +1,8 @@
 .include "main.inc"
 .include "common.inc"
 
+PLAYER_ACC = $0020
+
 .segment "HEADER"
     .byte "NES" ; id string
     .byte $1A
@@ -14,6 +16,12 @@
     nmi_lock: .res $01
     nmi_frame: .res $01
     ppu_ready: .res $01
+    draw_pos: .res $02
+    buttons: .res $01
+    player_x: .res $02
+    player_y: .res $02
+    player_vel_x: .res $02
+    player_vel_y: .res $02
 
 .segment "BSS"
     ppu_palette: .res $20
@@ -69,18 +77,94 @@
 @loop:
     jsr ppu_wait
 
-    ldx nmi_frame
-    cmp #50
-    bne :+
-    jsr ppu_stop
+    jsr poll_gamepad
+
+    lda buttons
+    and #PAD_L
+    beq :+
+    lda player_vel_x+1
+    sec
+    sbc #<PLAYER_ACC
+    sta player_vel_x+1
+    lda player_vel_x+0
+    sbc #>PLAYER_ACC
+    sta player_vel_x+0
 :
+
+    lda buttons
+    and #PAD_R
+    beq :+
+    lda player_vel_x+1
+    clc
+    adc #<PLAYER_ACC
+    sta player_vel_x+1
+    lda player_vel_x+0
+    adc #>PLAYER_ACC
+    sta player_vel_x+0
+:
+
+    lda buttons
+    and #PAD_U
+    beq :+
+    lda player_vel_y+1
+    sec
+    sbc #<PLAYER_ACC
+    sta player_vel_y+1
+    lda player_vel_y+0
+    sbc #>PLAYER_ACC
+    sta player_vel_y+0
+:
+
+    lda buttons
+    and #PAD_D
+    beq :+
+    lda player_vel_y+1
+    clc
+    adc #<PLAYER_ACC
+    sta player_vel_y+1
+    lda player_vel_y+0
+    adc #>PLAYER_ACC
+    sta player_vel_y+0
+:
+
+    lda player_x+1
+    clc
+    adc player_vel_x+1
+    sta player_x+1
+    lda player_x+0
+    adc player_vel_x+0
+    sta player_x+0
+
+    lda player_y+1
+    clc
+    adc player_vel_y+1
+    sta player_y+1
+    lda player_y+0
+    adc player_vel_y+0
+    sta player_y+0
+
+    lda player_x
+    sta draw_pos+0
+    lda player_y
+    sta draw_pos+1
+    lda #1
+    jsr draw_player_sprite
+
+    lda draw_pos+1
+    clc
+    adc #14
+    sta draw_pos+1
+
+    lda #5
+    jsr draw_player_sprite
+
     jmp @loop
 
 .endproc
 
 .export irq_handler
 .proc irq_handler
-    RTI
+    rti
 .endproc
 
 .segment "CODE"
@@ -171,19 +255,6 @@
     rts
 .endproc
 
-.segment "CODE"
-.proc load_palette
-    ldx #0
-@loop:
-    lda PALETTE,x
-    sta ppu_palette,x
-    inx
-    cpx #$20
-    bne @loop
-
-    rts
-.endproc
-
 .export ppu_wait
 .proc ppu_wait
     lda #1
@@ -208,13 +279,102 @@
     rts
 .endproc
 
+.proc load_palette
+    ldx #0
+@loop:
+    lda PALETTE,x
+    sta ppu_palette,x
+    inx
+    cpx #$20
+    bne @loop
+
+    rts
+.endproc
+
+; A -> oam sprite index
+; draw_pos[0] -> x coords
+; draw_pos[1] -> y coords
+.proc draw_player_sprite
+    asl a
+    asl a
+    tax
+
+    ; x coord
+    lda draw_pos+1
+    sec
+    sbc #4
+    sta OAM+0, x
+    sta OAM+4, x
+    clc
+    adc #8
+    sta OAM+8, x
+    sta OAM+12, x
+    inx
+
+    ; sprite
+    lda #$00
+    sta OAM+0, x
+    lda #$01
+    sta OAM+4, x
+    lda #$10
+    sta OAM+8, x
+    lda #$11
+    sta OAM+12, x
+    inx
+
+    ; attr
+    lda #0
+    sta OAM+0, x
+    sta OAM+4, x
+    sta OAM+8, x
+    sta OAM+12, x
+    inx
+
+    ; y coord
+    lda draw_pos+0
+    sec
+    sbc #4
+    sta OAM+0, x
+    sta OAM+8, x
+    clc
+    adc #8
+    sta OAM+4, x
+    sta OAM+12, x
+
+    rts
+.endproc
+
+; updates zeropage variable 'buttons'
+.proc poll_gamepad
+    ; strobe the gamepad to latch current button state
+	lda #1
+	sta GAMEPAD1
+	lda #0
+	sta GAMEPAD1
+	; read 8 bytes from the interface at $4016
+	ldx #8
+	:
+		pha
+		lda GAMEPAD1
+		; combine low two bits and store in carry bit
+		and #%00000011
+		cmp #%00000001
+		pla
+		; rotate carry into gamepad variable
+		ror
+		dex
+		bne :-
+	sta buttons
+	rts
+.endproc
+
 .segment "RODATA"
 PALETTE:
-    .byte $3C,$15,$26,$37 ; bg0 purple/pink
+    .byte $1A,$15,$26,$37 ; bg0 purple/pink
     .byte $3C,$09,$19,$29 ; bg1 green
     .byte $0F,$01,$11,$21 ; bg2 blue
     .byte $0F,$00,$10,$30 ; bg3 greyscale
-    .byte $32,$20,$30,$38 ; sp0 yellow
+    .byte $1A,$20,$10,$00 ; sp0 yellow
     .byte $0F,$14,$24,$34 ; sp1 purple
     .byte $0F,$1B,$2B,$3B ; sp2 teal
     .byte $0F,$12,$22,$32 ; sp3 marine
