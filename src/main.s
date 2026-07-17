@@ -22,6 +22,8 @@ PLAYER_ACC = $0020
     player_y: .res $02
     player_vel_x: .res $02
     player_vel_y: .res $02
+    scroll_x: .res $01
+    scroll_y: .res $01
 
 .segment "BSS"
     ppu_palette: .res $20
@@ -69,79 +71,67 @@ PLAYER_ACC = $0020
 
     jsr load_palette
 
+    sta $2002
+    lda #$20
+    sta $2006
+    lda #$00
+    sta $2006
+    jsr load_background
+
+    sta $2002
+    lda #$28
+    sta $2006
+    lda #$00
+    sta $2006
+    jsr load_background
+
     ; enable interrupts and start nmi
     cli
     lda #%10010000
     sta $2000
+
+    lda #24
+    sta player_x
+    lda #16
+    sta player_y
 
 @loop:
     jsr ppu_wait
 
     jsr poll_gamepad
 
+    lda nmi_frame
+    and #$03
+    bne :+
+    inc scroll_x
+    inc scroll_y
+    :
+
     lda buttons
     and #PAD_L
     beq :+
-    lda player_vel_x+1
-    sec
-    sbc #<PLAYER_ACC
-    sta player_vel_x+1
-    lda player_vel_x+0
-    sbc #>PLAYER_ACC
-    sta player_vel_x+0
-:
+        jsr player_move_left
+    :
 
     lda buttons
     and #PAD_R
     beq :+
-    lda player_vel_x+1
-    clc
-    adc #<PLAYER_ACC
-    sta player_vel_x+1
-    lda player_vel_x+0
-    adc #>PLAYER_ACC
-    sta player_vel_x+0
-:
+        jsr player_move_right
+    :
 
     lda buttons
     and #PAD_U
     beq :+
-    lda player_vel_y+1
-    sec
-    sbc #<PLAYER_ACC
-    sta player_vel_y+1
-    lda player_vel_y+0
-    sbc #>PLAYER_ACC
-    sta player_vel_y+0
-:
+        jsr player_move_up
+    :
 
     lda buttons
     and #PAD_D
     beq :+
-    lda player_vel_y+1
-    clc
-    adc #<PLAYER_ACC
-    sta player_vel_y+1
-    lda player_vel_y+0
-    adc #>PLAYER_ACC
-    sta player_vel_y+0
-:
+        jsr player_move_down
+    :
 
-    lda player_x+1
-    clc
-    adc player_vel_x+1
-    sta player_x+1
-    lda player_x+0
-    adc player_vel_x+0
-    sta player_x+0
-
-    lda player_y+1
-    clc
-    adc player_vel_y+1
-    sta player_y+1
-    lda player_y+0
-    adc player_vel_y+0
-    sta player_y+0
+    jsr player_apply_movement
 
     lda player_x
     sta draw_pos+0
@@ -154,7 +144,6 @@ PLAYER_ACC = $0020
     clc
     adc #14
     sta draw_pos+1
-
     lda #5
     jsr draw_player_sprite
 
@@ -240,8 +229,9 @@ PLAYER_ACC = $0020
 
     ; reset scroll
     lda $2002
-    lda #0
+    lda scroll_x
     sta $2005
+    lda scroll_y
     sta $2005
 
     ; enable rendering
@@ -298,7 +288,6 @@ PLAYER_ACC = $0020
     asl a
     asl a
     tax
-
     ; x coord
     lda draw_pos+1
     sec
@@ -368,13 +357,120 @@ PLAYER_ACC = $0020
 	rts
 .endproc
 
+.proc load_background
+    ldy #0
+@copy_bg_1:
+    ldx #0
+@copy_bg_2:
+    lda #$00
+    sta $2007
+    sta $2007
+    lda #$FF
+    sta $2007
+    sta $2007
+    inx
+    cpx #16
+    bne @copy_bg_2
+
+    ldx #0
+@copy_bg_3:
+    lda #$FF
+    sta $2007
+    sta $2007
+    lda #$00
+    sta $2007
+    sta $2007
+    inx
+    cpx #16
+    bne @copy_bg_3
+
+    iny
+    cpy #7
+    bne @copy_bg_1
+
+@copy_bg_4:
+
+
+    rts
+.endproc
+
+; ====================
+;       Player
+; ====================
+
+.proc player_move_left
+    lda player_vel_x+1
+    sec
+    sbc #<PLAYER_ACC
+    sta player_vel_x+1
+    lda player_vel_x+0
+    sbc #>PLAYER_ACC
+    sta player_vel_x+0
+    rts
+.endproc
+
+.proc player_move_right
+    lda player_vel_x+1
+    clc
+    adc #<PLAYER_ACC
+    sta player_vel_x+1
+    lda player_vel_x+0
+    adc #>PLAYER_ACC
+    sta player_vel_x+0
+    rts
+.endproc
+
+.proc player_move_up
+    lda player_vel_y+1
+    sec
+    sbc #<PLAYER_ACC
+    sta player_vel_y+1
+    lda player_vel_y+0
+    sbc #>PLAYER_ACC
+    sta player_vel_y+0
+    rts
+.endproc
+
+.proc player_move_down
+    lda player_vel_y+1
+    clc
+    adc #<PLAYER_ACC
+    sta player_vel_y+1
+    lda player_vel_y+0
+    adc #>PLAYER_ACC
+    sta player_vel_y+0
+    rts
+.endproc
+
+.proc player_apply_movement
+    ; horizontal movement
+    lda player_x+1
+    clc
+    adc player_vel_x+1
+    sta player_x+1
+    lda player_x+0
+    adc player_vel_x+0
+    sta player_x+0
+
+    ; vertical movement
+    lda player_y+1
+    clc
+    adc player_vel_y+1
+    sta player_y+1
+    lda player_y+0
+    adc player_vel_y+0
+    sta player_y+0
+
+    rts
+.endproc
+
 .segment "RODATA"
 PALETTE:
-    .byte $1A,$15,$26,$37 ; bg0 purple/pink
-    .byte $3C,$09,$19,$29 ; bg1 green
+    .byte $30,$15,$26,$31
+    .byte $3C,$09,$19,$29
     .byte $0F,$01,$11,$21 ; bg2 blue
     .byte $0F,$00,$10,$30 ; bg3 greyscale
-    .byte $1A,$20,$10,$00 ; sp0 yellow
+    .byte $30,$20,$10,$00 ; sp0 yellow
     .byte $0F,$14,$24,$34 ; sp1 purple
     .byte $0F,$1B,$2B,$3B ; sp2 teal
     .byte $0F,$12,$22,$32 ; sp3 marine

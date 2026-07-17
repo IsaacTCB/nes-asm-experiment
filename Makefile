@@ -1,4 +1,4 @@
-NAME := cart
+NAME := program
 
 AS := ca65 --verbose
 LD := ld65
@@ -8,12 +8,13 @@ INCLUDES := --include-dir src
 OBJS := $(patsubst src/%.s,build/%.o,$(SRCS))
 DEPS := $(patsubst %.o,%.d,$(OBJS))
 
-BUILD_ROM := $(NAME).nes
+ROM := $(NAME).nes
+DBG := $(NAME).dbg
 
 .PHONY: clean
 
-$(BUILD_ROM): $(OBJS)
-	$(LD) $(OBJS) -o $(BUILD_ROM) -t nes --dbgfile $(NAME).dbg
+$(ROM): $(OBJS)
+	$(LD) $(OBJS) -o "$(ROM)" -t nes --dbgfile "$(DBG)"
 
 build/%.o: src/%.s
 	mkdir -p $(@D)
@@ -23,4 +24,4 @@ build/%.o: src/%.s
 
 clean:
 	rm -rf build
-	rm -rf $(BUILD_ROM)
+	rm -rf $(ROM) $(DBG)
