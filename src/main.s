@@ -1,7 +1,28 @@
 .include "main.inc"
 .include "common.inc"
 
-PLAYER_ACC = $0020
+PLAYER_ACC = $0040
+PLAYER_FRC = $0080
+PLAYER_GRV = $0020
+
+.macro checkbtn btn
+    lda buttons
+    and btn
+.endmacro
+
+.macro checkbtn_pressed btn
+    lda lastbuttons
+    eor #$FF
+    and buttons
+    and btn
+.endmacro
+
+.macro checkbtn_released btn
+    lda buttons
+    eor #$FF
+    and lastbuttons
+    and btn
+.endmacro
 
 .segment "HEADER"
     .byte "NES" ; id string
@@ -18,8 +39,10 @@ PLAYER_ACC = $0020
     ppu_ready: .res $01
     draw_pos: .res $02
     buttons: .res $01
+    lastbuttons: .res $01
     player_x: .res $02
     player_y: .res $02
+    player_input_dir: .res $01
     player_vel_x: .res $02
     player_vel_y: .res $02
     scroll_x: .res $01
@@ -98,7 +121,9 @@ PLAYER_ACC = $0020
 @loop:
     jsr ppu_wait
 
-    jsr poll_gamepad
+    lda buttons
+    sta lastbuttons
+    jsr poll_gamepad_safe
 
     lda nmi_frame
     and #$03
@@ -107,26 +132,57 @@ PLAYER_ACC = $0020
     inc scroll_y
     :
 
-    lda buttons
-    and #PAD_L
+    lda #$00
+    sta player_input_dir
+
+    ; move left
+    checkbtn #PAD_L
     beq :+
-        jsr player_move_left
+        lda #$FF
+        sta player_input_dir
     :
 
-    lda buttons
-    and #PAD_R
+    ; move right
+    checkbtn #PAD_R
     beq :+
-        jsr player_move_right
+        ; fix for some controllers/emulators
+        ; where you can press left and right
+        ; simultaneously.
+        lda player_input_dir
+        beq @not_moving_left
+        lda #$00
+        sta player_input_dir
+        jmp :+
+
+    @not_moving_left:
+        lda #$01
+        sta player_input_dir
     :
 
-    lda buttons
-    and #PAD_U
+    lda player_input_dir
+    beq @player_friction
+    bmi @player_move_left
+    bpl @player_move_right
+
+@player_friction:
+    jsr player_apply_friction
+    jmp @player_done
+
+@player_move_left:
+    jsr player_move_left
+    jmp @player_done
+
+@player_move_right:
+    jsr player_move_right
+    ; jmp @player_done
+
+@player_done:
+    checkbtn #PAD_A
     beq :+
         jsr player_move_up
     :
 
-    lda buttons
-    and #PAD_D
+    checkbtn #PAD_B
     beq :+
         jsr player_move_down
     :
@@ -235,8 +291,8 @@ PLAYER_ACC = $0020
     sta $2005
 
     ; enable rendering
-	lda #%00011110
-	sta $2001
+    lda #%00011110
+    sta $2001
 
     lda #%00
     sta ppu_ready
@@ -333,28 +389,60 @@ PLAYER_ACC = $0020
     rts
 .endproc
 
-; updates zeropage variable 'buttons'
+; result is stored in accumulator,
+; does not write `buttons`.
 .proc poll_gamepad
     ; strobe the gamepad to latch current button state
-	lda #1
-	sta GAMEPAD1
-	lda #0
-	sta GAMEPAD1
-	; read 8 bytes from the interface at $4016
-	ldx #8
-	:
-		pha
-		lda GAMEPAD1
-		; combine low two bits and store in carry bit
-		and #%00000011
-		cmp #%00000001
-		pla
-		; rotate carry into gamepad variable
-		ror
-		dex
-		bne :-
-	sta buttons
-	rts
+    ; whenever latch is open, the controller enters
+    ; parallel mode, meaning it updates each button
+    ; in its internal "memory"
+    lda #1
+    sta GAMEPAD1
+    ; writing #0 to gamepad closes the latch.
+    ; once the latch is closed, the controller
+    ; freezes its internal "memory" and enters
+    ; serial mode so that we can read each button
+    ; state.
+    lda #0
+    sta GAMEPAD1
+    ; read 8 bytes from the interface at $4016
+    ;
+    ; the controller only sends 1 bit per read.
+    ; each bit represents a button.
+    ldx #8
+    :
+        ; push buttons bitset into stack
+        pha
+        ; first low bit is the button value
+        ; second low bit is the expansion port button value (famicom)
+        lda GAMEPAD1
+        and #%00000011
+        ; cmp checks if either one of the two bits are
+        ; set, then stores the result into carry bit.
+        cmp #%00000001
+        ; restore buttons bitset from stack
+        pla
+        ; rotate carry into button bitset
+        ror
+        dex
+        bne :-
+    rts
+.endproc
+
+; the good old SMB3 safe gamepad polling function
+; to fix corrupted reads due to DPCM.
+;
+; result is stored in `buttons`
+.proc poll_gamepad_safe
+    jsr poll_gamepad
+
+@loop:
+    sta buttons
+    jsr poll_gamepad
+    cmp buttons
+    bne @loop
+
+    rts
 .endproc
 
 .proc load_background
@@ -389,7 +477,6 @@ PLAYER_ACC = $0020
     bne @copy_bg_1
 
 @copy_bg_4:
-
 
     rts
 .endproc
@@ -434,11 +521,78 @@ PLAYER_ACC = $0020
 .proc player_move_down
     lda player_vel_y+1
     clc
-    adc #<PLAYER_ACC
+    adc #<PLAYER_GRV
     sta player_vel_y+1
     lda player_vel_y+0
-    adc #>PLAYER_ACC
+    adc #>PLAYER_GRV
     sta player_vel_y+0
+
+    ; check upper
+    lda player_vel_y+0
+    cmp #$07
+    bmi @skip_clamp
+
+    ; check lower
+    lda player_vel_y+1
+    cmp #$00
+    bmi @skip_clamp
+
+    ; clamp
+    lda #$07
+    sta player_vel_y+0
+    lda #$00
+    sta player_vel_y+1
+
+@skip_clamp:
+    rts
+.endproc
+
+.proc player_apply_friction
+    ; if velocity is exactly 0, do nothing.
+    lda player_vel_x
+    bne @check_sign
+    lda player_vel_x+1
+    beq @done
+
+@check_sign:
+    bmi @left_friction
+
+@right_friction:
+    sec
+    lda player_vel_x+1
+    sbc #<PLAYER_FRC
+    sta player_vel_x+1
+    lda player_vel_x
+    sbc #>PLAYER_FRC
+
+    ; if the operation crossed zero,
+    ; then clamp velocity to zero.
+    bmi @zero_out
+
+    sta player_vel_x
+    jmp @done
+
+@left_friction:
+    clc
+    lda player_vel_x+1
+    adc #<PLAYER_FRC
+    sta player_vel_x+1
+    lda player_vel_x
+    adc #>PLAYER_FRC
+
+    ; if the operation crossed zero,
+    ; then clamp velocity to zero.
+    bpl @zero_out
+
+    sta player_vel_x
+    jmp @done
+
+@zero_out:
+    lda #0
+    sta player_vel_x
+    sta player_vel_x+1
+
+@done:
     rts
 .endproc
 
