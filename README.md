@@ -2,8 +2,8 @@
 
 ![Screenshot of the thing](img/screenshot.png)
 
-This repo contains the source code of the cool little 2D platformer
-that I'm making so that I can learn and practice NES programming.
+This repo contains the source code for a cool little 2D platformer
+that I'm developing as a way to practice NES programming.
 
 Not tested on real hardware because I don't have an NES.
 
