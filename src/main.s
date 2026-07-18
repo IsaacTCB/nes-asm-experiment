@@ -2,8 +2,11 @@
 .include "common.inc"
 
 PLAYER_ACC = $0040
-PLAYER_FRC = $0080
+PLAYER_FRC = $0020
 PLAYER_GRV = $0020
+
+PLAYER_WIDTH = 6
+PLAYER_HEIGHT = 6
 
 .macro checkbtn btn
     lda buttons
@@ -47,6 +50,7 @@ PLAYER_GRV = $0020
     player_vel_y: .res $02
     scroll_x: .res $01
     scroll_y: .res $01
+    temp: .res $08
 
 .segment "BSS"
     ppu_palette: .res $20
@@ -113,9 +117,9 @@ PLAYER_GRV = $0020
     lda #%10010000
     sta $2000
 
-    lda #24
+    lda #$40
     sta player_x
-    lda #16
+    lda #$30
     sta player_y
 
 @loop:
@@ -124,13 +128,6 @@ PLAYER_GRV = $0020
     lda buttons
     sta lastbuttons
     jsr poll_gamepad_safe
-
-    lda nmi_frame
-    and #$03
-    bne :+
-    inc scroll_x
-    inc scroll_y
-    :
 
     lda #$00
     sta player_input_dir
@@ -194,13 +191,6 @@ PLAYER_GRV = $0020
     lda player_y
     sta draw_pos+1
     lda #1
-    jsr draw_player_sprite
-
-    lda draw_pos+1
-    clc
-    adc #14
-    sta draw_pos+1
-    lda #5
     jsr draw_player_sprite
 
     jmp @loop
@@ -291,8 +281,8 @@ PLAYER_GRV = $0020
     sta $2005
 
     ; enable rendering
-    lda #%00011110
-    sta $2001
+	lda #%00011110
+	sta $2001
 
     lda #%00
     sta ppu_ready
@@ -344,10 +334,10 @@ PLAYER_GRV = $0020
     asl a
     asl a
     tax
-    ; x coord
+    ; y coord
     lda draw_pos+1
     sec
-    sbc #4
+    sbc #9
     sta OAM+0, x
     sta OAM+4, x
     clc
@@ -375,10 +365,10 @@ PLAYER_GRV = $0020
     sta OAM+12, x
     inx
 
-    ; y coord
+    ; x coord
     lda draw_pos+0
     sec
-    sbc #4
+    sbc #7
     sta OAM+0, x
     sta OAM+8, x
     clc
@@ -396,37 +386,37 @@ PLAYER_GRV = $0020
     ; whenever latch is open, the controller enters
     ; parallel mode, meaning it updates each button
     ; in its internal "memory"
-    lda #1
-    sta GAMEPAD1
+	lda #1
+	sta GAMEPAD1
     ; writing #0 to gamepad closes the latch.
     ; once the latch is closed, the controller
     ; freezes its internal "memory" and enters
     ; serial mode so that we can read each button
     ; state.
-    lda #0
-    sta GAMEPAD1
-    ; read 8 bytes from the interface at $4016
+	lda #0
+	sta GAMEPAD1
+	; read 8 bytes from the interface at $4016
     ;
     ; the controller only sends 1 bit per read.
     ; each bit represents a button.
-    ldx #8
-    :
+	ldx #8
+	:
         ; push buttons bitset into stack
-        pha
-        ; first low bit is the button value
+		pha
+		; first low bit is the button value
         ; second low bit is the expansion port button value (famicom)
-        lda GAMEPAD1
-        and #%00000011
+		lda GAMEPAD1
+		and #%00000011
         ; cmp checks if either one of the two bits are
         ; set, then stores the result into carry bit.
-        cmp #%00000001
+		cmp #%00000001
         ; restore buttons bitset from stack
-        pla
-        ; rotate carry into button bitset
-        ror
-        dex
-        bne :-
-    rts
+		pla
+		; rotate carry into button bitset
+		ror
+		dex
+		bne :-
+	rts
 .endproc
 
 ; the good old SMB3 safe gamepad polling function
@@ -446,37 +436,68 @@ PLAYER_GRV = $0020
 .endproc
 
 .proc load_background
-    ldy #0
-@copy_bg_1:
-    ldx #0
-@copy_bg_2:
+    ; set PPU address to $2000
+    lda #$20
+    sta $2006
     lda #$00
-    sta $2007
-    sta $2007
+    sta $2006
+
+    ldx #0 ; index into tilemap
+    ldy #15 ; number of source rows
+
+@row:
+    ; first copy of the row
+    lda #16
+    sta temp
+
+@copy1:
+    lda tilemap, x
+    cmp #1
+    beq @solid1
+    lda #0
+    jmp @write1
+
+@solid1:
     lda #$FF
-    sta $2007
-    sta $2007
-    inx
-    cpx #16
-    bne @copy_bg_2
 
-    ldx #0
-@copy_bg_3:
+@write1:
+    sta $2007
+    sta $2007 ; scales tileset horizontally
+
+    inx
+    dec temp
+    bne @copy1
+
+    ; rewind X so we can reread the same row
+    txa
+    sec
+    sbc #16
+    tax
+
+    ; second copy of the row
+    lda #16
+    sta temp
+
+@copy2:
+    lda tilemap, x
+    cmp #1
+    beq @solid2
+    lda #0
+    jmp @write2
+
+@solid2:
     lda #$FF
+
+@write2:
     sta $2007
     sta $2007
-    lda #$00
-    sta $2007
-    sta $2007
+
     inx
-    cpx #16
-    bne @copy_bg_3
+    dec temp
+    bne @copy2
 
-    iny
-    cpy #7
-    bne @copy_bg_1
-
-@copy_bg_4:
+    dey
+    bne @row
 
     rts
 .endproc
@@ -547,6 +568,16 @@ PLAYER_GRV = $0020
     rts
 .endproc
 
+.macro ADD16 position, velocity
+    lda position+1
+    clc
+    adc velocity+1
+    sta position+1
+    lda position+0
+    adc velocity+0
+    sta position+0
+.endmacro
+
 .proc player_apply_friction
     ; if velocity is exactly 0, do nothing.
     lda player_vel_x
@@ -596,38 +627,214 @@ PLAYER_GRV = $0020
     rts
 .endproc
 
-.proc player_apply_movement
-    ; horizontal movement
-    lda player_x+1
-    clc
-    adc player_vel_x+1
-    sta player_x+1
-    lda player_x+0
-    adc player_vel_x+0
-    sta player_x+0
+; get metatile index from x and y coords
+;
+; in pseudocode:
+; tx = player_x div 16
+; ty = player_y div 16
+; idx = (ty * 16) + tx
+.proc metatile_get_index
+    lda div16_table, x
+    sta temp
+    tya
+    and #%11110000
+    ora temp
+    rts
+.endproc
 
-    ; vertical movement
-    lda player_y+1
+.proc player_horizontal_movement
+    ; apply horizontal movement
+    ADD16 player_x, player_vel_x
+
+    ; detect direction
+    lda player_vel_x+0
+    bne :+ ; check subvelocity if necessary
+        lda player_vel_x+1
+        beq @fail
+    :
+    bpl @right_collision
+
+@left_collision:
+    lda player_x
+    sec
+    sbc #PLAYER_WIDTH
+    tax
+    ldy player_y
+    jsr metatile_get_index
+    tax
+    lda tilemap, x
+    beq :+ ; if tile is solid
+        ; snap to grid
+        lda player_x
+        sec
+        sbc #PLAYER_WIDTH
+        clc
+        adc #15
+        and #%11110000
+        clc
+        adc #PLAYER_WIDTH
+        sta player_x
+        jmp @success
+    :
+    jmp @fail
+
+@right_collision:
+    lda player_x
     clc
-    adc player_vel_y+1
-    sta player_y+1
-    lda player_y+0
-    adc player_vel_y+0
-    sta player_y+0
+    adc #PLAYER_WIDTH
+    tax
+    ldy player_y
+    jsr metatile_get_index
+    tax
+    lda tilemap, x
+    beq :+
+        ; snap
+        lda player_x
+        clc
+        adc #PLAYER_WIDTH
+        and #%11110000
+        sec
+        sbc #PLAYER_WIDTH
+        sta player_x
+        jmp @success
+    :
+    ; jmp @fail
+
+@fail:
+    ; collision has failed
+    lda #0
+    jmp @done
+
+@success:
+    lda #1
+
+@done:
+    rts
+.endproc
+
+.proc player_vertical_movement
+    ; apply vertical movement
+    ADD16 player_y, player_vel_y
+
+    ; detect direction
+    lda player_vel_y+0
+    bne :+ ; check subvelocity if necessary
+        lda player_vel_y+1
+        beq @fail
+    :
+    bpl @down_collision
+
+@up_collision:
+    ldx player_x
+    lda player_y
+    sec
+    sbc #PLAYER_HEIGHT
+    tay
+    jsr metatile_get_index
+    tax
+    lda tilemap, x
+    beq :+ ; if tile is solid
+        ; snap to grid
+        lda player_y
+        sec
+        sbc #PLAYER_HEIGHT
+        clc
+        adc #15
+        and #%11110000
+        clc
+        adc #PLAYER_HEIGHT
+        sta player_y
+        jmp @success
+    :
+    jmp @fail
+
+@down_collision:
+    ldx player_x
+    lda player_y
+    clc
+    adc #PLAYER_HEIGHT
+    tay
+    jsr metatile_get_index
+    tax
+    lda tilemap, x
+    beq :+
+        ; snap
+        lda player_y
+        clc
+        adc #PLAYER_HEIGHT
+        and #%11110000
+        sec
+        sbc #PLAYER_HEIGHT
+        sta player_y
+        jmp @success
+    :
+    ; jmp @fail
+
+@fail:
+    ; collision has failed
+    lda #0
+    jmp @done
+
+@success:
+    lda #1
+
+@done:
+    rts
+.endproc
+
+.proc player_apply_movement
+    jsr player_horizontal_movement
+    beq :+
+        ; clear speed
+        lda #0
+        sta player_vel_x+0
+        sta player_vel_x+1
+    :
+
+    jsr player_vertical_movement
+    beq :+
+        ; clear speed
+        lda #0
+        sta player_vel_y+0
+        sta player_vel_y+1
+    :
 
     rts
 .endproc
 
 .segment "RODATA"
 PALETTE:
-    .byte $30,$15,$26,$31
+    .byte $0C,$15,$26,$2C
     .byte $3C,$09,$19,$29
-    .byte $0F,$01,$11,$21 ; bg2 blue
+    .byte $0F,$01,$2C,$21 ; bg2 blue
     .byte $0F,$00,$10,$30 ; bg3 greyscale
-    .byte $30,$20,$10,$00 ; sp0 yellow
+    .byte $0C,$20,$10,$00 ; sp0 yellow
     .byte $0F,$14,$24,$34 ; sp1 purple
     .byte $0F,$1B,$2B,$3B ; sp2 teal
     .byte $0F,$12,$22,$32 ; sp3 marine
+
+tilemap:
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$00,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$00,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$01,$00,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$01,$00,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$01,$00,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$01,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$01,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$01,$00,$01
+
+    .byte $01,$00,$00,$00,$01,$01,$00,$00, $00,$00,$00,$00,$01,$00,$00,$01
+    .byte $01,$00,$00,$00,$01,$01,$00,$00, $00,$00,$01,$01,$00,$00,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$00,$00,$01
+    .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$00,$00,$01
+    .byte $01,$01,$01,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$00,$00,$01
+    .byte $01,$01,$01,$01,$01,$01,$01,$01, $01,$01,$01,$01,$01,$01,$01,$01
+    .byte $01,$01,$01,$01,$01,$01,$01,$01, $01,$01,$01,$01,$01,$01,$01,$01
+
+div16_table:
+    .repeat 256, I
+        .byte I / 16
+    .endrep
 
 .segment "VECTORS"
     .addr nmi_handler
