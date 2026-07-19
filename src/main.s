@@ -63,7 +63,6 @@ PLAYER_HEIGHT = 6
 .segment "STARTUP"
 
 .export reset_handler
-
 .proc reset_handler
     sei ; disables interrupts
     cld ; turn off decimal mode
