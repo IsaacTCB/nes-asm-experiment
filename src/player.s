@@ -60,26 +60,15 @@
     jmp @player_done
 
 @player_move_left:
-    jsr player_move_left
+    SUB16 player_vel_x, #PLAYER_ACC
     jmp @player_done
 
 @player_move_right:
-    jsr player_move_right
-    ; jmp @player_done
+    ADD16 player_vel_x, #PLAYER_ACC
 
 @player_done:
     jsr player_apply_movement
 
-    rts
-.endproc
-
-.proc player_move_left
-    SUB16 player_vel_x, #PLAYER_ACC
-    rts
-.endproc
-
-.proc player_move_right
-    ADD16 player_vel_x, #PLAYER_ACC
     rts
 .endproc
 

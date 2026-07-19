@@ -6,10 +6,6 @@
 ; ------------------
 
 .global player_update
-.global player_apply_movement
-.global player_apply_friction
-.global player_move_right
-.global player_move_left
 .global player_draw_sprite
 
 ; ------------------
