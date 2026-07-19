@@ -548,14 +548,17 @@ PLAYER_HEIGHT = 6
     adc #>PLAYER_GRV
     sta player_vel_y+0
 
-@check_sign:
+    ; verify signess
     lda player_vel_y
-    bpl @moving_downwards
+    bpl @moving_down
 
-@moving_upwards:
+; ------------------------
+;    Clamp up direction
+; ------------------------
+@moving_up:
     lda player_vel_y + 0
     cmp #>PLAYER_MIN_VSP
-    bmi @clamp_up_velocity
+    bcc @clamp_up_velocity
     bne @done
 
     lda player_vel_y + 1
@@ -570,7 +573,10 @@ PLAYER_HEIGHT = 6
     sta player_vel_y+1
     rts
 
-@moving_downwards:
+; ------------------------
+;   Clamp down direction
+; ------------------------
+@moving_down:
     lda player_vel_y + 0
     cmp #>PLAYER_MAX_VSP
     bcc @done
@@ -586,7 +592,6 @@ PLAYER_HEIGHT = 6
     sta player_vel_y+0
     lda #<PLAYER_MAX_VSP
     sta player_vel_y+1
-    rts
 
 @done:
     rts
