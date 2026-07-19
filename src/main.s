@@ -768,18 +768,12 @@ PLAYER_HEIGHT = 6
 
     jsr player_horizontal_movement
     beq :+
-        ; clear speed
-        lda #0
-        sta player_vel_x+0
-        sta player_vel_x+1
+        CLEAR16 player_vel_x
     :
 
     jsr player_vertical_movement
     beq :+
-        ; clear speed
-        lda #0
-        sta player_vel_y+0
-        sta player_vel_y+1
+        CLEAR16 player_vel_y
     :
 
     rts
@@ -789,12 +783,12 @@ PLAYER_HEIGHT = 6
 PALETTE:
     .byte $0C,$15,$26,$2C
     .byte $3C,$09,$19,$29
-    .byte $0F,$01,$2C,$21 ; bg2 blue
-    .byte $0F,$00,$10,$30 ; bg3 greyscale
-    .byte $0C,$20,$10,$00 ; sp0 yellow
-    .byte $0F,$14,$24,$34 ; sp1 purple
-    .byte $0F,$1B,$2B,$3B ; sp2 teal
-    .byte $0F,$12,$22,$32 ; sp3 marine
+    .byte $0F,$01,$2C,$21
+    .byte $0F,$00,$10,$30
+    .byte $0C,$20,$10,$00
+    .byte $0F,$14,$24,$34
+    .byte $0F,$1B,$2B,$3B
+    .byte $0F,$12,$22,$32
 
 tilemap:
     .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$00,$00,$01

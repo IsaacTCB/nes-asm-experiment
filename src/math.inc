@@ -15,7 +15,7 @@
 .endif
 .endmacro
 
-.macro CLR16 position
+.macro CLEAR16 position
     lda #0
     sta position+0
     sta position+1
