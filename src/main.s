@@ -161,13 +161,13 @@ PLAYER_HEIGHT = 6
         sta player_input_dir
     :
 
-    ; jumping 
+    ; jumping
     checkbtn_pressed #PAD_B
     beq :+
         STORE16 player_vel_y, #$FC00
     :
 
-    ; fly 
+    ; fly
     checkbtn #PAD_A
     beq :+
         STORE16 player_vel_y, #$FD00
@@ -288,8 +288,8 @@ PLAYER_HEIGHT = 6
     sta $2005
 
     ; enable rendering
-	lda #%00011110
-	sta $2001
+    lda #%00011110
+    sta $2001
 
     lda #%00
     sta ppu_ready
@@ -393,37 +393,37 @@ PLAYER_HEIGHT = 6
     ; whenever latch is open, the controller enters
     ; parallel mode, meaning it updates each button
     ; in its internal "memory"
-	lda #1
-	sta GAMEPAD1
+    lda #1
+    sta GAMEPAD1
     ; writing #0 to gamepad closes the latch.
     ; once the latch is closed, the controller
     ; freezes its internal "memory" and enters
     ; serial mode so that we can read each button
     ; state.
-	lda #0
-	sta GAMEPAD1
-	; read 8 bytes from the interface at $4016
+    lda #0
+    sta GAMEPAD1
+    ; read 8 bytes from the interface at $4016
     ;
     ; the controller only sends 1 bit per read.
     ; each bit represents a button.
-	ldx #8
-	:
+    ldx #8
+    :
         ; push buttons bitset into stack
-		pha
-		; first low bit is the button value
+        pha
+        ; first low bit is the button value
         ; second low bit is the expansion port button value (famicom)
-		lda GAMEPAD1
-		and #%00000011
+        lda GAMEPAD1
+        and #%00000011
         ; cmp checks if either one of the two bits are
         ; set, then stores the result into carry bit.
-		cmp #%00000001
+        cmp #%00000001
         ; restore buttons bitset from stack
-		pla
-		; rotate carry into button bitset
-		ror
-		dex
-		bne :-
-	rts
+        pla
+        ; rotate carry into button bitset
+        ror
+        dex
+        bne :-
+    rts
 .endproc
 
 ; the good old SMB3 safe gamepad polling function
