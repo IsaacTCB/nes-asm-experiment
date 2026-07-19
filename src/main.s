@@ -1,6 +1,8 @@
 .include "main.inc"
 .include "common.inc"
 
+.include "math.inc"
+
 PLAYER_ACC = $0040
 PLAYER_FRC = $0020
 PLAYER_GRV = $0020
@@ -162,19 +164,13 @@ PLAYER_HEIGHT = 6
     ; jumping 
     checkbtn_pressed #PAD_B
     beq :+
-        lda #$FC
-        sta player_vel_y+0
-        lda #$00
-        sta player_vel_y+1
+        STORE16 player_vel_y, #$FC00
     :
 
     ; fly 
     checkbtn #PAD_A
     beq :+
-        lda #$FD
-        sta player_vel_y+0
-        lda #$00
-        sta player_vel_y+1
+        STORE16 player_vel_y, #$FD00
     :
 
     lda player_input_dir
@@ -518,37 +514,19 @@ PLAYER_HEIGHT = 6
 ; ====================
 
 .proc player_move_left
-    lda player_vel_x+1
-    sec
-    sbc #<PLAYER_ACC
-    sta player_vel_x+1
-    lda player_vel_x+0
-    sbc #>PLAYER_ACC
-    sta player_vel_x+0
+    SUB16 player_vel_x, #PLAYER_ACC
     rts
 .endproc
 
 .proc player_move_right
-    lda player_vel_x+1
-    clc
-    adc #<PLAYER_ACC
-    sta player_vel_x+1
-    lda player_vel_x+0
-    adc #>PLAYER_ACC
-    sta player_vel_x+0
+    ADD16 player_vel_x, #PLAYER_ACC
     rts
 .endproc
 
 .proc player_gravity
-    lda player_vel_y+1
-    clc
-    adc #<PLAYER_GRV
-    sta player_vel_y+1
-    lda player_vel_y+0
-    adc #>PLAYER_GRV
-    sta player_vel_y+0
+    ADD16 player_vel_y, #PLAYER_GRV
 
-    ; verify signess
+    ; verify sign
     lda player_vel_y
     bpl @moving_down
 
@@ -567,10 +545,7 @@ PLAYER_HEIGHT = 6
     jmp @done
 
 @clamp_up_velocity:
-    lda #>PLAYER_MIN_VSP
-    sta player_vel_y+0
-    lda #<PLAYER_MIN_VSP
-    sta player_vel_y+1
+    STORE16 player_vel_y, #PLAYER_MIN_VSP
     rts
 
 ; ------------------------
@@ -588,24 +563,11 @@ PLAYER_HEIGHT = 6
     beq @done
 
 @clamp_down_velocity:
-    lda #>PLAYER_MAX_VSP
-    sta player_vel_y+0
-    lda #<PLAYER_MAX_VSP
-    sta player_vel_y+1
+    STORE16 player_vel_y, #PLAYER_MAX_VSP
 
 @done:
     rts
 .endproc
-
-.macro ADD16 position, velocity
-    lda position+1
-    clc
-    adc velocity+1
-    sta position+1
-    lda position+0
-    adc velocity+0
-    sta position+0
-.endmacro
 
 .proc player_apply_friction
     ; if velocity is exactly 0, do nothing.
@@ -618,12 +580,7 @@ PLAYER_HEIGHT = 6
     bmi @left_friction
 
 @right_friction:
-    sec
-    lda player_vel_x+1
-    sbc #<PLAYER_FRC
-    sta player_vel_x+1
-    lda player_vel_x
-    sbc #>PLAYER_FRC
+    SUB16 player_vel_x, #PLAYER_FRC
 
     ; if the operation crossed zero,
     ; then clamp velocity to zero.
@@ -633,12 +590,7 @@ PLAYER_HEIGHT = 6
     jmp @done
 
 @left_friction:
-    clc
-    lda player_vel_x+1
-    adc #<PLAYER_FRC
-    sta player_vel_x+1
-    lda player_vel_x
-    adc #>PLAYER_FRC
+    ADD16 player_vel_x, #PLAYER_FRC
 
     ; if the operation crossed zero,
     ; then clamp velocity to zero.
