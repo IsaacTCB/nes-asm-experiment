@@ -5,6 +5,9 @@ PLAYER_ACC = $0040
 PLAYER_FRC = $0020
 PLAYER_GRV = $0020
 
+PLAYER_MAX_VSP = $0700
+PLAYER_MAX_VSP_NEGATIVE = $F700
+
 PLAYER_WIDTH = 6
 PLAYER_HEIGHT = 6
 
@@ -156,6 +159,24 @@ PLAYER_HEIGHT = 6
         sta player_input_dir
     :
 
+    ; jumping 
+    checkbtn_pressed #PAD_B
+    beq :+
+        lda #$FC
+        sta player_vel_y+0
+        lda #$00
+        sta player_vel_y+1
+    :
+
+    ; fly 
+    checkbtn #PAD_A
+    beq :+
+        lda #$FD
+        sta player_vel_y+0
+        lda #$00
+        sta player_vel_y+1
+    :
+
     lda player_input_dir
     beq @player_friction
     bmi @player_move_left
@@ -174,16 +195,6 @@ PLAYER_HEIGHT = 6
     ; jmp @player_done
 
 @player_done:
-    checkbtn #PAD_A
-    beq :+
-        jsr player_move_up
-    :
-
-    checkbtn #PAD_B
-    beq :+
-        jsr player_move_down
-    :
-
     jsr player_apply_movement
 
     lda player_x
@@ -528,18 +539,7 @@ PLAYER_HEIGHT = 6
     rts
 .endproc
 
-.proc player_move_up
-    lda player_vel_y+1
-    sec
-    sbc #<PLAYER_ACC
-    sta player_vel_y+1
-    lda player_vel_y+0
-    sbc #>PLAYER_ACC
-    sta player_vel_y+0
-    rts
-.endproc
-
-.proc player_move_down
+.proc player_gravity
     lda player_vel_y+1
     clc
     adc #<PLAYER_GRV
@@ -548,23 +548,55 @@ PLAYER_HEIGHT = 6
     adc #>PLAYER_GRV
     sta player_vel_y+0
 
-    ; check upper
-    lda player_vel_y+0
-    cmp #$07
-    bmi @skip_clamp
+@check_sign:
+    lda player_vel_y
+    bpl @moving_downwards
 
-    ; check lower
-    lda player_vel_y+1
-    cmp #$00
-    bmi @skip_clamp
+    ; if (player_vel_y[0] <= #<PLAYER_MAX_VSP_NEGATIVE
+    ;  && player_vel_y[1] < #>PLAYER_MAX_VSP_NEGATIVE) {
+    ;     player_vel_y[0] = #<PLAYER_MAX_VSP_NEGATIVE;
+    ;     player_vel_y[1] = #>PLAYER_MAX_VSP_NEGATIVE;
+    ; }
+@moving_upwards:
+    lda player_vel_y + 0
+    cmp #>PLAYER_MAX_VSP_NEGATIVE
+    bmi :+
+    bne @done
+:
+    lda player_vel_y + 1
+    cmp #<PLAYER_MAX_VSP_NEGATIVE
+    bmi @clamp_up_velocity
+    jmp @done
 
-    ; clamp
-    lda #$07
+@clamp_up_velocity:
+    lda #>PLAYER_MAX_VSP_NEGATIVE
     sta player_vel_y+0
-    lda #$00
+    lda #<PLAYER_MAX_VSP_NEGATIVE
     sta player_vel_y+1
+    rts
 
-@skip_clamp:
+    ; if (player_vel_y[0] >= #<PLAYER_MAX_VSP
+    ;  && player_vel_y[1] > #>PLAYER_MAX_VSP) {
+    ;     player_vel_y[0] = #<PLAYER_MAX_VSP;
+    ;     player_vel_y[1] = #>PLAYER_MAX_VSP;
+    ; }
+@moving_downwards:
+    lda player_vel_y + 0
+    cmp #>PLAYER_MAX_VSP
+    bmi @done
+    lda player_vel_y + 1
+    cmp #<PLAYER_MAX_VSP
+    beq @done
+    bmi @done
+
+@clamp_down_velocity:
+    lda #>PLAYER_MAX_VSP
+    sta player_vel_y+0
+    lda #<PLAYER_MAX_VSP
+    sta player_vel_y+1
+    rts
+
+@done:
     rts
 .endproc
 
@@ -783,6 +815,8 @@ PLAYER_HEIGHT = 6
 .endproc
 
 .proc player_apply_movement
+    jsr player_gravity
+
     jsr player_horizontal_movement
     beq :+
         ; clear speed
