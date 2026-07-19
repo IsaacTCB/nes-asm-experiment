@@ -6,7 +6,7 @@ PLAYER_FRC = $0020
 PLAYER_GRV = $0020
 
 PLAYER_MAX_VSP = $0700
-PLAYER_MAX_VSP_NEGATIVE = (-PLAYER_MAX_VSP)
+PLAYER_MIN_VSP = (-PLAYER_MAX_VSP)
 
 PLAYER_WIDTH = 6
 PLAYER_HEIGHT = 6
@@ -552,42 +552,34 @@ PLAYER_HEIGHT = 6
     lda player_vel_y
     bpl @moving_downwards
 
-    ; if (player_vel_y[0] <= #<PLAYER_MAX_VSP_NEGATIVE
-    ;  && player_vel_y[1] < #>PLAYER_MAX_VSP_NEGATIVE) {
-    ;     player_vel_y[0] = #<PLAYER_MAX_VSP_NEGATIVE;
-    ;     player_vel_y[1] = #>PLAYER_MAX_VSP_NEGATIVE;
-    ; }
 @moving_upwards:
     lda player_vel_y + 0
-    cmp #>PLAYER_MAX_VSP_NEGATIVE
-    bmi :+
-    bne @done
-:
-    lda player_vel_y + 1
-    cmp #<PLAYER_MAX_VSP_NEGATIVE
+    cmp #>PLAYER_MIN_VSP
     bmi @clamp_up_velocity
+    bne @done
+
+    lda player_vel_y + 1
+    cmp #<PLAYER_MIN_VSP
+    bcc @clamp_up_velocity
     jmp @done
 
 @clamp_up_velocity:
-    lda #>PLAYER_MAX_VSP_NEGATIVE
+    lda #>PLAYER_MIN_VSP
     sta player_vel_y+0
-    lda #<PLAYER_MAX_VSP_NEGATIVE
+    lda #<PLAYER_MIN_VSP
     sta player_vel_y+1
     rts
 
-    ; if (player_vel_y[0] >= #<PLAYER_MAX_VSP
-    ;  && player_vel_y[1] > #>PLAYER_MAX_VSP) {
-    ;     player_vel_y[0] = #<PLAYER_MAX_VSP;
-    ;     player_vel_y[1] = #>PLAYER_MAX_VSP;
-    ; }
 @moving_downwards:
     lda player_vel_y + 0
     cmp #>PLAYER_MAX_VSP
-    bmi @done
+    bcc @done
+    bne @clamp_down_velocity
+
     lda player_vel_y + 1
     cmp #<PLAYER_MAX_VSP
+    bcc @done
     beq @done
-    bmi @done
 
 @clamp_down_velocity:
     lda #>PLAYER_MAX_VSP
