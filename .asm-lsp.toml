@@ -1,0 +1,10 @@
+[default_config]
+version = "0.10.1"
+assembler = "ca65"
+instruction_set = "6502"
+
+[default_config.opts]
+compiler = "ca65"
+compile_flags_txt = ["-g", "-o", "build/asm_lsp_lint.o", "-t", "nes"]
+diagnostics = true
+default_diagnostics = false
