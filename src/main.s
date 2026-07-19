@@ -85,15 +85,15 @@ PLAYER_HEIGHT = 6
     ldx #0
 @clearmem:
     lda #$00
-    sta $0000, X
-    sta $0100, X
-    sta $0300, X
-    sta $0400, X
-    sta $0500, X
-    sta $0600, X
-    sta $0700, X
+    sta $0000, x
+    sta $0100, x
+    sta $0300, x
+    sta $0400, x
+    sta $0500, x
+    sta $0600, x
+    sta $0700, x
     lda #$FE
-    sta $0200, X
+    sta $0200, x
     inx
     bne @clearmem
 
