@@ -348,7 +348,7 @@ PLAYER_HEIGHT = 6
     ; y coord
     lda draw_pos+1
     sec
-    sbc #9
+    sbc #10
     sta OAM+0, x
     sta OAM+4, x
     clc
