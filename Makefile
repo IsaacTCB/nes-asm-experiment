@@ -3,7 +3,7 @@ NAME := program
 AS := ca65 --verbose
 LD := ld65
 
-SRCS := src/main.s
+SRCS := src/main.s src/player.s
 INCLUDES := --include-dir src
 OBJS := $(patsubst src/%.s,build/%.o,$(SRCS))
 DEPS := $(patsubst %.o,%.d,$(OBJS))

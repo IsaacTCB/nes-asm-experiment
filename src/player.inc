@@ -1,0 +1,33 @@
+.ifndef _PLAYER_INC
+.define _PLAYER_INC
+
+; ------------------
+;    Subroutines
+; ------------------
+
+.global player_update
+.global player_apply_movement
+.global player_apply_friction
+.global player_move_right
+.global player_move_left
+.global player_draw_sprite
+
+; ------------------
+;     Constants
+; ------------------
+
+; Movement
+
+PLAYER_ACC = $0040
+PLAYER_FRC = $0020
+PLAYER_GRV = $0020
+
+PLAYER_MAX_VSP = $0700
+PLAYER_MIN_VSP = (-PLAYER_MAX_VSP)
+
+; Collision
+
+PLAYER_WIDTH = 6
+PLAYER_HEIGHT = 6
+
+.endif ; _PLAYER_INC

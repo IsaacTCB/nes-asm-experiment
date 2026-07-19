@@ -1,36 +1,8 @@
 .include "main.inc"
+
 .include "common.inc"
-
 .include "math.inc"
-
-PLAYER_ACC = $0040
-PLAYER_FRC = $0020
-PLAYER_GRV = $0020
-
-PLAYER_MAX_VSP = $0700
-PLAYER_MIN_VSP = (-PLAYER_MAX_VSP)
-
-PLAYER_WIDTH = 6
-PLAYER_HEIGHT = 6
-
-.macro checkbtn btn
-    lda buttons
-    and btn
-.endmacro
-
-.macro checkbtn_pressed btn
-    lda lastbuttons
-    eor #$FF
-    and buttons
-    and btn
-.endmacro
-
-.macro checkbtn_released btn
-    lda buttons
-    eor #$FF
-    and lastbuttons
-    and btn
-.endmacro
+.include "player.inc"
 
 .segment "HEADER"
     .byte "NES" ; id string
@@ -61,6 +33,12 @@ PLAYER_HEIGHT = 6
     ppu_palette: .res $20
 
 .segment "STARTUP"
+
+.macro wait_for_vblank
+    :
+        BIT $2002
+        BPL :-
+.endmacro
 
 .export reset_handler
 .proc reset_handler
@@ -133,71 +111,14 @@ PLAYER_HEIGHT = 6
     sta lastbuttons
     jsr poll_gamepad_safe
 
-    lda #$00
-    sta player_input_dir
-
-    ; move left
-    checkbtn #PAD_L
-    beq :+
-        lda #$FF
-        sta player_input_dir
-    :
-
-    ; move right
-    checkbtn #PAD_R
-    beq :+
-        ; fix for some controllers/emulators
-        ; where you can press left and right
-        ; simultaneously.
-        lda player_input_dir
-        beq @not_moving_left
-        lda #$00
-        sta player_input_dir
-        jmp :+
-
-    @not_moving_left:
-        lda #$01
-        sta player_input_dir
-    :
-
-    ; jumping
-    checkbtn_pressed #PAD_B
-    beq :+
-        STORE16 player_vel_y, #$FC00
-    :
-
-    ; fly
-    checkbtn #PAD_A
-    beq :+
-        STORE16 player_vel_y, #$FD00
-    :
-
-    lda player_input_dir
-    beq @player_friction
-    bmi @player_move_left
-    bpl @player_move_right
-
-@player_friction:
-    jsr player_apply_friction
-    jmp @player_done
-
-@player_move_left:
-    jsr player_move_left
-    jmp @player_done
-
-@player_move_right:
-    jsr player_move_right
-    ; jmp @player_done
-
-@player_done:
-    jsr player_apply_movement
-
+    ; update & draw player
+    jsr player_update
     lda player_x
     sta draw_pos+0
     lda player_y
     sta draw_pos+1
     lda #1
-    jsr draw_player_sprite
+    jsr player_draw_sprite
 
     jmp @loop
 
@@ -333,58 +254,6 @@ PLAYER_HEIGHT = 6
     rts
 .endproc
 
-; A -> oam sprite index
-; draw_pos[0] -> x coords
-; draw_pos[1] -> y coords
-.proc draw_player_sprite
-    asl a
-    asl a
-    tax
-    ; y coord
-    lda draw_pos+1
-    sec
-    sbc #10
-    sta OAM+0, x
-    sta OAM+4, x
-    clc
-    adc #8
-    sta OAM+8, x
-    sta OAM+12, x
-    inx
-
-    ; sprite
-    lda #$00
-    sta OAM+0, x
-    lda #$01
-    sta OAM+4, x
-    lda #$10
-    sta OAM+8, x
-    lda #$11
-    sta OAM+12, x
-    inx
-
-    ; attr
-    lda #0
-    sta OAM+0, x
-    sta OAM+4, x
-    sta OAM+8, x
-    sta OAM+12, x
-    inx
-
-    ; x coord
-    lda draw_pos+0
-    sec
-    sbc #7
-    sta OAM+0, x
-    sta OAM+8, x
-    clc
-    adc #8
-    sta OAM+4, x
-    sta OAM+12, x
-
-    rts
-.endproc
-
 ; result is stored in accumulator,
 ; does not write `buttons`.
 .proc poll_gamepad
@@ -508,276 +377,6 @@ PLAYER_HEIGHT = 6
     rts
 .endproc
 
-; ====================
-;       Player
-; ====================
-
-.proc player_move_left
-    SUB16 player_vel_x, #PLAYER_ACC
-    rts
-.endproc
-
-.proc player_move_right
-    ADD16 player_vel_x, #PLAYER_ACC
-    rts
-.endproc
-
-.proc player_gravity
-    ADD16 player_vel_y, #PLAYER_GRV
-
-    ; verify sign
-    lda player_vel_y
-    bpl @moving_down
-
-; ------------------------
-;    Clamp up direction
-; ------------------------
-@moving_up:
-    lda player_vel_y + 0
-    cmp #>PLAYER_MIN_VSP
-    bcc @clamp_up_velocity
-    bne @done
-
-    lda player_vel_y + 1
-    cmp #<PLAYER_MIN_VSP
-    bcc @clamp_up_velocity
-    jmp @done
-
-@clamp_up_velocity:
-    STORE16 player_vel_y, #PLAYER_MIN_VSP
-    rts
-
-; ------------------------
-;   Clamp down direction
-; ------------------------
-@moving_down:
-    lda player_vel_y + 0
-    cmp #>PLAYER_MAX_VSP
-    bcc @done
-    bne @clamp_down_velocity
-
-    lda player_vel_y + 1
-    cmp #<PLAYER_MAX_VSP
-    bcc @done
-    beq @done
-
-@clamp_down_velocity:
-    STORE16 player_vel_y, #PLAYER_MAX_VSP
-
-@done:
-    rts
-.endproc
-
-.proc player_apply_friction
-    ; if velocity is exactly 0, do nothing.
-    lda player_vel_x
-    bne @check_sign
-    lda player_vel_x+1
-    beq @done
-
-@check_sign:
-    bmi @left_friction
-
-@right_friction:
-    SUB16 player_vel_x, #PLAYER_FRC
-
-    ; if the operation crossed zero,
-    ; then clamp velocity to zero.
-    bmi @zero_out
-
-    sta player_vel_x
-    jmp @done
-
-@left_friction:
-    ADD16 player_vel_x, #PLAYER_FRC
-
-    ; if the operation crossed zero,
-    ; then clamp velocity to zero.
-    bpl @zero_out
-
-    sta player_vel_x
-    jmp @done
-
-@zero_out:
-    lda #0
-    sta player_vel_x
-    sta player_vel_x+1
-
-@done:
-    rts
-.endproc
-
-; get metatile index from x and y coords
-;
-; in pseudocode:
-; tx = player_x div 16
-; ty = player_y div 16
-; idx = (ty * 16) + tx
-.proc metatile_get_index
-    lda div16_table, x
-    sta temp
-    tya
-    and #%11110000
-    ora temp
-    rts
-.endproc
-
-.proc player_horizontal_movement
-    ; apply horizontal movement
-    ADD16 player_x, player_vel_x
-
-    ; detect direction
-    lda player_vel_x+0
-    bne :+ ; check subvelocity if necessary
-        lda player_vel_x+1
-        beq @fail
-    :
-    bpl @right_collision
-
-@left_collision:
-    lda player_x
-    sec
-    sbc #PLAYER_WIDTH
-    tax
-    ldy player_y
-    jsr metatile_get_index
-    tax
-    lda tilemap, x
-    beq :+ ; if tile is solid
-        ; snap to grid
-        lda player_x
-        sec
-        sbc #PLAYER_WIDTH
-        clc
-        adc #15
-        and #%11110000
-        clc
-        adc #PLAYER_WIDTH
-        sta player_x
-        jmp @success
-    :
-    jmp @fail
-
-@right_collision:
-    lda player_x
-    clc
-    adc #PLAYER_WIDTH
-    tax
-    ldy player_y
-    jsr metatile_get_index
-    tax
-    lda tilemap, x
-    beq :+
-        ; snap
-        lda player_x
-        clc
-        adc #PLAYER_WIDTH
-        and #%11110000
-        sec
-        sbc #PLAYER_WIDTH
-        sta player_x
-        jmp @success
-    :
-    ; jmp @fail
-
-@fail:
-    ; collision has failed
-    lda #0
-    jmp @done
-
-@success:
-    lda #1
-
-@done:
-    rts
-.endproc
-
-.proc player_vertical_movement
-    ; apply vertical movement
-    ADD16 player_y, player_vel_y
-
-    ; detect direction
-    lda player_vel_y+0
-    bne :+ ; check subvelocity if necessary
-        lda player_vel_y+1
-        beq @fail
-    :
-    bpl @down_collision
-
-@up_collision:
-    ldx player_x
-    lda player_y
-    sec
-    sbc #PLAYER_HEIGHT
-    tay
-    jsr metatile_get_index
-    tax
-    lda tilemap, x
-    beq :+ ; if tile is solid
-        ; snap to grid
-        lda player_y
-        sec
-        sbc #PLAYER_HEIGHT
-        clc
-        adc #15
-        and #%11110000
-        clc
-        adc #PLAYER_HEIGHT
-        sta player_y
-        jmp @success
-    :
-    jmp @fail
-
-@down_collision:
-    ldx player_x
-    lda player_y
-    clc
-    adc #PLAYER_HEIGHT
-    tay
-    jsr metatile_get_index
-    tax
-    lda tilemap, x
-    beq :+
-        ; snap
-        lda player_y
-        clc
-        adc #PLAYER_HEIGHT
-        and #%11110000
-        sec
-        sbc #PLAYER_HEIGHT
-        sta player_y
-        jmp @success
-    :
-    ; jmp @fail
-
-@fail:
-    ; collision has failed
-    lda #0
-    jmp @done
-
-@success:
-    lda #1
-
-@done:
-    rts
-.endproc
-
-.proc player_apply_movement
-    jsr player_gravity
-
-    jsr player_horizontal_movement
-    beq :+
-        CLEAR16 player_vel_x
-    :
-
-    jsr player_vertical_movement
-    beq :+
-        CLEAR16 player_vel_y
-    :
-
-    rts
-.endproc
-
 .segment "RODATA"
 PALETTE:
     .byte $0C,$15,$26,$2C
@@ -789,6 +388,7 @@ PALETTE:
     .byte $0F,$1B,$2B,$3B
     .byte $0F,$12,$22,$32
 
+.global tilemap
 tilemap:
     .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$00,$00,$01
     .byte $01,$00,$00,$00,$00,$00,$00,$00, $00,$00,$00,$00,$00,$00,$00,$01
@@ -807,6 +407,7 @@ tilemap:
     .byte $01,$01,$01,$01,$01,$01,$01,$01, $01,$01,$01,$01,$01,$01,$01,$01
     .byte $01,$01,$01,$01,$01,$01,$01,$01, $01,$01,$01,$01,$01,$01,$01,$01
 
+.global div16_table
 div16_table:
     .repeat 256, I
         .byte I / 16
