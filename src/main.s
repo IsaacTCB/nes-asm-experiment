@@ -16,8 +16,8 @@
     .byte $01   ; intended default controller
 
 .segment "ZEROPAGE"
-    nmi_lock: .res $01
     nmi_frame: .res $01
+    nmi_lock: .res $01
     ppu_ready: .res $01
     draw_pos: .res $02
     buttons: .res $01
