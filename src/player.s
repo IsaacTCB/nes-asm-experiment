@@ -134,8 +134,6 @@
     ; if the operation crossed zero,
     ; then clamp velocity to zero.
     bmi @zero_out
-
-    sta player_vel_x
     jmp @done
 
 @left_friction:
@@ -144,8 +142,6 @@
     ; if the operation crossed zero,
     ; then clamp velocity to zero.
     bpl @zero_out
-
-    sta player_vel_x
     jmp @done
 
 @zero_out:
@@ -195,7 +191,7 @@
     lda tilemap, x
     beq :+ ; if tile is solid
         ; snap to grid
-        lda player_x
+        lda player_x+0
         sec
         sbc #PLAYER_WIDTH
         clc
@@ -203,7 +199,9 @@
         and #%11110000
         clc
         adc #PLAYER_WIDTH
-        sta player_x
+        sta player_x+0
+        lda #0
+        sta player_x+1
         jmp @success
     :
     jmp @fail
@@ -219,13 +217,15 @@
     lda tilemap, x
     beq :+
         ; snap
-        lda player_x
+        lda player_x+0
         clc
         adc #PLAYER_WIDTH
         and #%11110000
         sec
         sbc #PLAYER_WIDTH
-        sta player_x
+        sta player_x+0
+        lda #0
+        sta player_x+1
         jmp @success
     :
     ; jmp @fail
@@ -265,7 +265,7 @@
     lda tilemap, x
     beq :+ ; if tile is solid
         ; snap to grid
-        lda player_y
+        lda player_y+0
         sec
         sbc #PLAYER_HEIGHT
         clc
@@ -273,7 +273,9 @@
         and #%11110000
         clc
         adc #PLAYER_HEIGHT
-        sta player_y
+        sta player_y+0
+        lda #0
+        sta player_y+1
         jmp @success
     :
     jmp @fail
@@ -289,13 +291,15 @@
     lda tilemap, x
     beq :+
         ; snap
-        lda player_y
+        lda player_y+0
         clc
         adc #PLAYER_HEIGHT
         and #%11110000
         sec
         sbc #PLAYER_HEIGHT
-        sta player_y
+        sta player_y+0
+        lda #0
+        sta player_y+1
         jmp @success
     :
     ; jmp @fail
