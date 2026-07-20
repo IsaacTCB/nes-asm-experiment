@@ -4,4 +4,4 @@ build/
 *.o
 *.nes
 *.dbg
-
+*.deb
