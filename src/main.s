@@ -317,6 +317,7 @@
 
 .proc load_background
     ; set PPU address to $2000
+    lda $2002
     lda #$20
     sta $2006
     lda #$00
@@ -378,6 +379,21 @@
 
     dey
     bne @row
+
+    ; Init background palettes
+    lda $2002
+    lda #$23
+    sta $2006
+    lda #$C0
+    sta $2006
+
+    lda #0
+    ldx #0
+@load_palette:
+    sta $2007
+    inx
+    cpx #$40
+    bne @load_palette
 
     rts
 .endproc
