@@ -332,6 +332,14 @@
     rts
 .endproc
 
+player_metasprite:
+    ;     X    Y    Tile Attr
+    .byte $F8, $F7, $00, $00
+    .byte $00, $F7, $01, $00
+    .byte $F8, $FF, $10, $00
+    .byte $00, $FF, $11, $00
+    .byte $80 ; end
+
 ; A -> oam sprite index
 ; draw_pos[0] -> x coords
 ; draw_pos[1] -> y coords
@@ -339,47 +347,54 @@
     asl a
     asl a
     tax
-    ; y coord
-    lda draw_pos+1
-    sec
-    sbc #10
-    sta OAM+0, x
-    sta OAM+4, x
+
+    ; u8 y = 0;
+    ; while (player_metasprite[y] == 0x80) {
+    ;
+    ;    OAM[x+0] = draw_y + player_metasprite[y+1];
+    ;    OAM[x+1] = player_metasprite[y+2];
+    ;    OAM[x+2] = player_metasprite[y+3];
+    ;    OAM[x+3] = draw_x + player_metasprite[y+0];
+    ;
+    ;    x += 4;
+    ;    y += 4;
+    ; }
+
+    ldy #0
+@copy_sprite:
+    ; check for breakpoint sentinel ($80)
+    lda player_metasprite, y
+    cmp #$80
+    beq @break
+
+    ; sprite y
+    lda draw_pos + 1
     clc
-    adc #8
-    sta OAM+8, x
-    sta OAM+12, x
+    adc player_metasprite + 1, y
+    sta OAM, x
     inx
-
-    ; sprite
-    lda #$00
-    sta OAM+0, x
-    lda #$01
-    sta OAM+4, x
-    lda #$10
-    sta OAM+8, x
-    lda #$11
-    sta OAM+12, x
+    ; sprite tile
+    lda player_metasprite + 2, y
+    sta OAM, x
     inx
-
-    ; attr
-    lda #0
-    sta OAM+0, x
-    sta OAM+4, x
-    sta OAM+8, x
-    sta OAM+12, x
+    ; sprite attr
+    lda player_metasprite + 3, y
+    sta OAM, x
     inx
-
-    ; x coord
-    lda draw_pos+0
-    sec
-    sbc #7
-    sta OAM+0, x
-    sta OAM+8, x
+    ; sprite x
+    lda draw_pos + 0
     clc
-    adc #8
-    sta OAM+4, x
-    sta OAM+12, x
+    adc player_metasprite + 0, y
+    sta OAM, x
+    inx
 
+    ; keep going
+    iny
+    iny
+    iny
+    iny
+    jmp @copy_sprite
+
+@break:
     rts
 .endproc
