@@ -39,25 +39,20 @@
     :
 
     ; jumping
-    checkbtn_pressed #PAD_B
+    checkbtn_pressed #PAD_A
     beq :+
         STORE16 player_vel_y, #$FC00
     :
 
     ; fly
-    checkbtn #PAD_A
+    checkbtn #PAD_B
     beq :+
         STORE16 player_vel_y, #$FD00
     :
 
     lda player_input_dir
     beq @player_friction
-    bmi @player_move_left
     bpl @player_move_right
-
-@player_friction:
-    jsr player_apply_friction
-    jmp @player_done
 
 @player_move_left:
     SUB16 player_vel_x, #PLAYER_ACC
@@ -65,6 +60,11 @@
 
 @player_move_right:
     ADD16 player_vel_x, #PLAYER_ACC
+    jmp @player_done
+
+@player_friction:
+    jsr player_apply_friction
+    jmp @player_done
 
 @player_done:
     jsr player_apply_movement
