@@ -31,6 +31,9 @@
     scroll_y: .res $01
     temp: .res $08
 
+.segment "OAM"
+    OAM: .res $FF
+
 .segment "BSS"
     ppu_palette: .res $20
 

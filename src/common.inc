@@ -2,7 +2,7 @@
 .define _COMMON_INC
 
 ; OAM memory page
-OAM = $0200
+.global OAM
 
 ; gamepads
 GAMEPAD1 = $4016
