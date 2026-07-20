@@ -26,7 +26,7 @@
 .endmacro
 
 .macro CLEAR16 short
-    STORE16 short, $0000
+    STORE16 short, #$0000
 .endmacro
 
 .macro ADD16 short, arg
