@@ -29,7 +29,7 @@
     player_vel_y: .res $02
     scroll_x: .res $01
     scroll_y: .res $01
-    temp: .res $08
+    temp: .res $01
 
 .segment "OAM"
     OAM: .res $FF
@@ -40,6 +40,7 @@
 .segment "STARTUP"
 
 .macro wait_for_vblank
+    BIT $2002
     :
         BIT $2002
         BPL :-
@@ -63,7 +64,6 @@
     sta $4010 ; disable PCM
 
     ; ensures that wait for vblank actually works
-    bit $2002
     wait_for_vblank
 
     ldx #0
@@ -84,19 +84,6 @@
     wait_for_vblank
 
     jsr load_palette
-
-    sta $2002
-    lda #$20
-    sta $2006
-    lda #$00
-    sta $2006
-    jsr load_background
-
-    sta $2002
-    lda #$28
-    sta $2006
-    lda #$00
-    sta $2006
     jsr load_background
 
     ; enable interrupts and start nmi
@@ -104,6 +91,7 @@
     lda #%10010000
     sta $2000
 
+    ; init player
     lda #$40
     sta player_x
     lda #$30
