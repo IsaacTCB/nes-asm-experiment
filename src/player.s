@@ -227,7 +227,7 @@ collision_tile: .res $01
 
     jsr metatile_get_index
     tax
-    
+
     ; discover collision type
     lda tilemap, x
     bne hit_label
@@ -243,7 +243,7 @@ collision_tile: .res $01
     sta collision_flags
     stx collision_tile
     rts
-        
+
 @collided_with_solid:
     lda #COLLISION_FLAGS_SOLID
     sta collision_flags
@@ -262,7 +262,7 @@ collision_tile: .res $01
     sta collision_flags
     stx collision_tile
     rts
-        
+
 @collided_with_solid:
     lda #COLLISION_FLAGS_SOLID
     sta collision_flags
@@ -274,7 +274,7 @@ collision_tile: .res $01
 .proc player_horizontal_movement
     ; apply horizontal movement
     ADD16 player_x, player_vel_x
-    
+
     get_edge_offsets player_y, PLAYER_HEIGHT
 
     ; detect direction
@@ -311,7 +311,7 @@ collision_tile: .res $01
         CLEAR16 player_vel_x
         snap_to_grid_end player_x, #PLAYER_WIDTH
     :
-    
+
 @skip:
     rts
 .endproc
@@ -319,7 +319,7 @@ collision_tile: .res $01
 .proc player_vertical_movement
     ; apply vertical movement
     ADD16 player_y, player_vel_y
-    
+
     get_edge_offsets player_x, PLAYER_WIDTH
 
     ; detect direction
@@ -365,7 +365,7 @@ collision_tile: .res $01
     ; not grounded
     lda #0
     sta $50
-    
+
 @skip:
     rts
 .endproc
