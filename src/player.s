@@ -8,6 +8,15 @@
 ;       Player
 ; ====================
 
+.segment "ZEROPAGE"
+collision_param1: .res $01
+collision_param2: .res $02
+
+; D1 == HIT
+COLLISION_FLAGS_SOLID = %00000001
+collision_flags: .res $01
+collision_tile: .res $01
+
 .segment "CODE"
 
 .proc player_update
@@ -39,6 +48,8 @@
     :
 
     ; jumping
+    lda $50
+    beq :+
     checkbtn_pressed #PAD_A
     beq :+
         STORE16 player_vel_y, #$FC00
@@ -168,151 +179,194 @@
     rts
 .endproc
 
+.macro snap_to_grid_start pos, size
+    lda pos+0
+    sec
+    sbc size
+    clc
+    adc #15
+    and #%11110000
+    clc
+    adc size
+    sta pos+0
+    lda #0
+    sta pos+1
+.endmacro
+
+.macro snap_to_grid_end pos, size
+    lda pos+0
+    clc
+    adc size
+    and #%11110000
+    sec
+    sbc size
+    sta pos+0
+    lda #0
+    sta pos+1
+.endmacro
+
+.macro get_edge_offsets var, edge_size
+    lda var
+    clc
+    adc #(edge_size-1)
+    sta collision_param2+0
+    lda var
+    sec
+    sbc #(edge_size-1)
+    sta collision_param2+1
+.endmacro
+
+.macro test_collision flipped, var, hit_label
+.if flipped = 1
+    ldx var
+    ldy collision_param1
+.else
+    ldx collision_param1
+    ldy var
+.endif
+
+    jsr metatile_get_index
+    tax
+    
+    ; discover collision type
+    lda tilemap, x
+    bne hit_label
+.endmacro
+
+.proc player_vertical_edge
+    ; check tile
+    test_collision 0, collision_param2+0, @collided_with_solid
+    test_collision 0, collision_param2+1, @collided_with_solid
+
+@not_collided:
+    lda #0
+    sta collision_flags
+    stx collision_tile
+    rts
+        
+@collided_with_solid:
+    lda #COLLISION_FLAGS_SOLID
+    sta collision_flags
+    stx collision_tile
+    rts
+
+.endproc
+
+.proc player_horizontal_edge
+    ; check tile
+    test_collision 1, collision_param2+0, @collided_with_solid
+    test_collision 1, collision_param2+1, @collided_with_solid
+
+@not_collided:
+    lda #0
+    sta collision_flags
+    stx collision_tile
+    rts
+        
+@collided_with_solid:
+    lda #COLLISION_FLAGS_SOLID
+    sta collision_flags
+    stx collision_tile
+    rts
+
+.endproc
+
 .proc player_horizontal_movement
     ; apply horizontal movement
     ADD16 player_x, player_vel_x
+    
+    get_edge_offsets player_y, PLAYER_HEIGHT
 
     ; detect direction
     lda player_vel_x+0
     bne :+ ; check subvelocity if necessary
         lda player_vel_x+1
-        beq @fail
+        beq @skip
     :
     bpl @right_collision
 
 @left_collision:
+    ; get player edge and store it in temp
     lda player_x
     sec
     sbc #PLAYER_WIDTH
-    tax
-    ldy player_y
-    jsr metatile_get_index
-    tax
-    lda tilemap, x
-    beq :+ ; if tile is solid
-        ; snap to grid
-        lda player_x+0
-        sec
-        sbc #PLAYER_WIDTH
-        clc
-        adc #15
-        and #%11110000
-        clc
-        adc #PLAYER_WIDTH
-        sta player_x+0
-        lda #0
-        sta player_x+1
-        jmp @success
+    sta collision_param1
+    jsr player_vertical_edge
+    and #COLLISION_FLAGS_SOLID
+    beq :+
+        CLEAR16 player_vel_x
+        snap_to_grid_start player_x, #PLAYER_WIDTH
     :
-    jmp @fail
+    rts
 
 @right_collision:
+    ; get player edge and store it in temp
     lda player_x
     clc
     adc #PLAYER_WIDTH
-    tax
-    ldy player_y
-    jsr metatile_get_index
-    tax
-    lda tilemap, x
+    sta collision_param1
+    jsr player_vertical_edge
+    and #COLLISION_FLAGS_SOLID
     beq :+
-        ; snap
-        lda player_x+0
-        clc
-        adc #PLAYER_WIDTH
-        and #%11110000
-        sec
-        sbc #PLAYER_WIDTH
-        sta player_x+0
-        lda #0
-        sta player_x+1
-        jmp @success
+        CLEAR16 player_vel_x
+        snap_to_grid_end player_x, #PLAYER_WIDTH
     :
-    ; jmp @fail
-
-@fail:
-    ; collision has failed
-    lda #0
-    jmp @done
-
-@success:
-    lda #1
-
-@done:
+    
+@skip:
     rts
 .endproc
 
 .proc player_vertical_movement
     ; apply vertical movement
     ADD16 player_y, player_vel_y
+    
+    get_edge_offsets player_x, PLAYER_WIDTH
 
     ; detect direction
     lda player_vel_y+0
     bne :+ ; check subvelocity if necessary
         lda player_vel_y+1
-        beq @fail
     :
     bpl @down_collision
 
 @up_collision:
-    ldx player_x
+    ; get player edge and store it in temp
     lda player_y
     sec
     sbc #PLAYER_HEIGHT
-    tay
-    jsr metatile_get_index
-    tax
-    lda tilemap, x
-    beq :+ ; if tile is solid
-        ; snap to grid
-        lda player_y+0
-        sec
-        sbc #PLAYER_HEIGHT
-        clc
-        adc #15
-        and #%11110000
-        clc
-        adc #PLAYER_HEIGHT
-        sta player_y+0
-        lda #0
-        sta player_y+1
-        jmp @success
+    sta collision_param1
+    jsr player_horizontal_edge
+    and #COLLISION_FLAGS_SOLID
+    beq :+
+        CLEAR16 player_vel_y
+        snap_to_grid_start player_y, #PLAYER_HEIGHT
     :
-    jmp @fail
+    ; not grounded
+    lda #0
+    sta $50
+    rts
 
 @down_collision:
-    ldx player_x
+    ; get player edge and store it in temp
     lda player_y
     clc
     adc #PLAYER_HEIGHT
-    tay
-    jsr metatile_get_index
-    tax
-    lda tilemap, x
+    sta collision_param1
+    jsr player_horizontal_edge
+    and #COLLISION_FLAGS_SOLID
     beq :+
-        ; snap
-        lda player_y+0
-        clc
-        adc #PLAYER_HEIGHT
-        and #%11110000
-        sec
-        sbc #PLAYER_HEIGHT
-        sta player_y+0
-        lda #0
-        sta player_y+1
-        jmp @success
+        CLEAR16 player_vel_y
+        snap_to_grid_end player_y, #PLAYER_HEIGHT
+        ; flag as grounded
+        lda #1
+        sta $50
+        jmp @skip
     :
-    ; jmp @fail
-
-@fail:
-    ; collision has failed
+    ; not grounded
     lda #0
-    jmp @done
-
-@success:
-    lda #1
-
-@done:
+    sta $50
+    
+@skip:
     rts
 .endproc
 
@@ -320,9 +374,6 @@
     jsr player_gravity
 
     jsr player_horizontal_movement
-    beq :+
-        CLEAR16 player_vel_x
-    :
 
     jsr player_vertical_movement
     beq :+
